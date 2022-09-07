@@ -1,75 +1,110 @@
 #include "main.h"
 
-char **_copyenv(void);
-void free_env(void);
-char **_getenv(const char *var);
-
 /**
- * _copyenv - Creates a copy of the environment.
- *
- * Return: If an error occurs - NULL.
- *         O/w - a double pointer to the new copy.
+ * cdFunc - execute cd builtin
+ * @build: input build
+ * Return: 1 on success, 0 on failure
  */
-char **_copyenv(void)
+int cdFunc(config *build)
 {
-	char **new_environ;
-	size_t size;
-	int index;
+	register uint count = 0;
+	_Bool ableToChange = false;
 
-	for (size = 0; environ[size]; size++)
-		;
-
-	new_environ = malloc(sizeof(char *) * (size + 1));
-	if (!new_environ)
-		return (NULL);
-
-	for (index = 0; environ[index]; index++)
-	{
-		new_environ[index] = malloc(_strlen(environ[index]) + 1);
-
-		if (!new_environ[index])
-		{
-			for (index--; index >= 0; index--)
-				free(new_environ[index]);
-			free(new_environ);
-			return (NULL);
-		}
-		_strcpy(new_environ[index], environ[index]);
-	}
-	new_environ[index] = NULL;
-
-	return (new_environ);
+	count = countArgs(build->args);
+	if (count == 1)
+		ableToChange = cdToHome(build);
+	else if (count == 2 && _strcmp(build->args[1], "-") == 0)
+		ableToChange = cdToPrevious(build);
+	else
+		ableToChange = cdToCustom(build);
+	if (ableToChange)
+		updateEnviron(build);
+	return (1);
 }
 
 /**
- * free_env - Frees the the environment copy.
+ * cdToHome - change directory to home
+ * @build: input build
+ * Return: true on success, false on failure
  */
-void free_env(void)
+_Bool cdToHome(config *build)
 {
-	int index;
+	register int i;
+	char *str, *ptr;
 
-	for (index = 0; environ[index]; index++)
-		free(environ[index]);
-	free(environ);
+	i = searchNode(build->env, "HOME");
+	if (i == -1)
+	{
+		return (true);
+	}
+	str = getNodeAtIndex(build->env, i);
+	ptr = _strchr(str, '=');
+	ptr++;
+	chdir(ptr);
+	free(str);
+	return (true);
 }
 
 /**
- * _getenv - Gets an environmental variable from the PATH.
- * @var: The name of the environmental variable to get.
- *
- * Return: If the environmental variable does not exist - NULL.
- *         Otherwise - a pointer to the environmental variable.
+ * cdToPrevious - change directory to previous directory -
+ * address is found in OLDPWD env var
+ * @build: input build
+ * Return: true on success, false on failure
  */
-char **_getenv(const char *var)
+_Bool cdToPrevious(config *build)
 {
-	int index, len;
+	register int i;
+	char *str, *ptr;
+	char *current = NULL;
 
-	len = _strlen(var);
-	for (index = 0; environ[index]; index++)
+	current = getcwd(current, 0);
+	i = searchNode(build->env, "OLDPWD");
+	if (i == -1)
 	{
-		if (_strncmp(var, environ[index], len) == 0)
-			return (&environ[index]);
+		chdir(current);
+		write(STDOUT_FILENO, current, _strlen(current));
+		displayNewLine();
+		return (true);
 	}
+	str = getNodeAtIndex(build->env, i);
+	ptr = _strchr(str, '=');
+	ptr++;
+	chdir(ptr);
+	write(STDOUT_FILENO, ptr, _strlen(ptr));
+	displayNewLine();
+	free(str);
+	return (true);
+}
 
-	return (NULL);
+/**
+ * cdToCustom - change directory to what user inputs in
+ * @build: input build
+ * Return: true on success, false on failure
+ */
+_Bool cdToCustom(config *build)
+{
+	register int changeStatus;
+
+	changeStatus = chdir(build->args[1]);
+	if (changeStatus == -1)
+	{
+		errno = EBADCD;
+		errorHandler(build);
+		return (false);
+	}
+	return (true);
+}
+
+/**
+ * updateEnviron - change environmental variables
+ * @build: input build
+ * Return: true on success false on failure
+ */
+_Bool updateEnviron(config *build)
+{
+	register int i;
+
+	i = updateOld(build);
+	updateCur(build, i);
+	return (true);
 }
