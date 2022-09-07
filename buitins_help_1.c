@@ -1,5 +1,4 @@
-
-#include "shell.h"
+#include "main.h"
 
 void help_all(void);
 void help_alias(void);
